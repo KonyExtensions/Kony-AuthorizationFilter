@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<userRoleConfig>
+	<roles>
+		<role>
+			<type>Authorized</type>  
+			<services>
+				<service>Service1Authorized</service> 
+				<service>Service2Authorized</service> 
+				<service>Service3</service> 
+				<service>Service4</service>				
+			</services>
+		</role>
+		<role>
+			<type>Visitor</type>  
+			<services>
+				<service>Service3</service> 
+				<service>Service4</service> 
+			</services>
+		</role>
+	</roles>
+</userRoleConfig>
