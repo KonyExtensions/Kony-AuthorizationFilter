@@ -1,0 +1,134 @@
+/**
+ * This filter should intercept the requests based on roles defined in configuration file : "AuthFilter.xml".
+ * This filter should be applied next to XSS Filter as below:
+ *	<filter>
+ *		<description>Filter to prevent unauthorized users from accessing role specific services</description>
+ *		<filter-name>AuthorizationFilter</filter-name>
+ *	<filter-class>com.kony.prateek.filters.AuthorizationFilter</filter-class>
+ *  </filter>
+ *  <filter-mapping>
+ *      <filter-name>AuthorizationFilter</filter-name>
+ *      <servlet-name>MWServlet</servlet-name>
+ *  </filter-mapping>
+ * If the requested service id is not from the list of configured services under specified role in session then this filter 
+ * sets the response header "BAD_REQUEST" to the value "AUTHENTICATION_REQUIRED". 
+ */
+package com.kony.prateek.filters;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+
+import javax.servlet.Filter;
+import javax.servlet.FilterChain;
+import javax.servlet.FilterConfig;
+import javax.servlet.ServletException;
+import javax.servlet.ServletRequest;
+import javax.servlet.ServletResponse;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
+
+import org.apache.log4j.Logger;
+
+/**
+ * @author Prateek
+ */
+public class AuthorizationFilter implements Filter {
+	
+	private static final Logger log = Logger.getLogger(AuthorizationFilter.class);
+	private static final String SERVICE_ID_PARAM 		= "serviceID";
+	private static final String ROLE_ID_PARAM 			= "user-role";
+	private static final String DEFAULT_ROLE 			= "Visitor";
+	private static HashMap<String,ArrayList<String>> serviceMap = null;
+	private FilterConfig filterConfig = null;
+	
+
+	/* (non-Javadoc)
+	 * @see javax.servlet.Filter#init(javax.servlet.FilterConfig)
+	 */
+	public void init(FilterConfig filterConfig) throws ServletException {
+		log.debug("Authorization Filter Configuration ######## START #########");
+		this.filterConfig = filterConfig;
+		serviceMap = UtilXMLReader.getServiceMap();
+		log.debug("Authorization Filter Configuration ######## END #########");
+	}
+	
+	/* (non-Javadoc)
+	 * @see javax.servlet.Filter#destroy()
+	 */
+	public void destroy() {
+		this.filterConfig = null;	
+	}
+
+	/* (non-Javadoc)
+	 * @see javax.servlet.Filter#doFilter(javax.servlet.ServletRequest, javax.servlet.ServletResponse, javax.servlet.FilterChain)
+	 */
+	public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse,
+			FilterChain filterChain) throws IOException, ServletException {
+		log.debug("Inside doFilter of Authorization Filter.");
+		
+		HttpServletRequest request = (HttpServletRequest) servletRequest;
+		HttpServletResponse response = (HttpServletResponse) servletResponse;
+		String role = null;
+		
+		log.debug("Requested Service ID : "+request.getParameter(SERVICE_ID_PARAM));		
+		try{
+			HttpSession session = request.getSession(false);
+			//If session exist allow services based on role
+			if( null != session  && null != session.getAttribute(ROLE_ID_PARAM)) {			
+				role = (String) session.getAttribute(ROLE_ID_PARAM);				
+			} else {	//for users with no valid session and no role defined, assume Visitor
+				role = DEFAULT_ROLE;
+			}
+			if (log.isDebugEnabled()) {
+				log.debug("User role:" + role);
+			}
+			if (isServiceIdAuthorized(request.getParameter(SERVICE_ID_PARAM),serviceMap,role)) {
+				log.debug("The requested service is authorized for role in session, so processing it further.");
+				filterChain.doFilter(servletRequest, servletResponse);
+			} else {
+				log.debug("The requested service is not authorized for specified role in session");
+				response.addHeader("BAD_REQUEST", "AUTHENTICATION_REQUIRED");
+				response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+				return;
+			}
+		}catch (Exception e) {
+			log.error("Exception in authorization filter code:"+e.getMessage());
+			return;	//user should be blocked in case of exception
+		}finally{
+			role = null;
+		}
+	}
+
+	/**
+	 * incomingService - service Id being sent in
+	 * HashMap<String,ArrayList<String>> hm - list of services from config file
+	 * String sessionType - This flag test the status of the session
+	 * 					  - Visitor - un-secure session
+	 * 					  - Authorized - authenticated user
+	 * returns true - Allow service to go to back end
+	 * 		   false - block the service
+	 */
+	
+	public static boolean isServiceIdAuthorized(String incomingService, HashMap<String,ArrayList<String>> hm, String roleListId) throws Exception
+	{
+		if(incomingService==null ||incomingService.length()==0)  //Blank service
+			return false;  // block the call
+				
+		ArrayList<String> ar = hm.get(roleListId); // pull list of service that are allowed for the list
+		
+		//If no role found assume Visitor
+		if(ar==null)
+			ar = hm.get(DEFAULT_ROLE);
+		
+		for(int i=0;i<ar.size();i++)
+		{
+			if(incomingService.equals(ar.get(i)))
+			{
+				return true; // allow service call to go to back-end	
+			}
+		}
+		return false;  // block the call
+	}
+}
