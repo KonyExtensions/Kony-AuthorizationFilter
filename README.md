@@ -1,7 +1,7 @@
 Kony-AuthorizationFilter
 ========================
 
-Template Utility
+Template Java code to implement user-authorization check for middleware services.
 
 This filter should be applied in web.xml for the middleware.war next to XSS Filter
  
